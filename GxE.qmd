@@ -1,0 +1,215 @@
+---
+title: "GxE"
+editor: visual
+---
+ Introduction: Nowadays, climate change is a pretty serious phenomenon and that's why everyone is paying a lot of attention to it. climate change has significant impacts on various sectors, including animal production. climate change is affecting milk production, both the quantity of production and its composition. Heat stress negatively affects the cows' comfort and overall health. Spain is one of the countries that is most affected by this climate change, since its affect varies between the north and the south of this country. As a geneticist, we have to study how the expression of the production characters of milk, fat and protein is changed in different zones of Spain (CC, MN, ES).
+
+```{r}
+#| echo: true
+#| eval: true
+#install.packages
+#install.packages("tidyverse")
+#devtools::install_github("thomasp85/patchwork")
+#install.packages("gridExtra")  # Instalar el paquete gridExtra
+
+#if (packageVersion("devtools") < 1.6) {
+#  install.packages("devtools")
+#}
+#devtools::install_github("hadley/lazyeval")
+#devtools::install_github("hadley/dplyr")
+
+```
+Loading Libraries 
+```{r}
+#| echo: true
+#| eval: true
+
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(plyr)
+ 
+```
+Editing the data 
+Only we used the data of the 1 lactation of the 3 Zones of Spain 
+```{r}
+#| echo: true
+#| eval: true
+rm(list=ls())
+### crear un spacio de trabajo
+setwd("K:\\Trabajo Maria Jesus\\EstudioGxE\\GxE_files")
+# Loading the data
+datos_raw<- read.table("Rumlac01_SCS.txt")
+dim(datos_raw)
+colnames(datos_raw)<-c("R_SC","S_SC","MP","Fat","P","F_p","P_p","Loc","H_Y_S","H_COn_D",
+                       "L_Age","Co_DIM","DIM","Animal","hetdimthi",
+                       "hetdimthiclass","cov1_thimu012","cov2_thimu012",
+                       "cov3_thimu012","cov1_dim","cov2_dim","cov3_dim","CO_Herd",
+                       "N_Part_L","D_Control","F_PARTO","dist_t","dist_hr","THI012")
+# ####### Redondear la variable THI012 a 2 decimales##############
+datos_raw <- datos_raw %>%
+  mutate(THI012 = round(THI012, 0))
+############ crear la columina zona en España  con solo 3 zonas ############
+datos_raw <- datos_raw %>%
+  mutate(Zona =case_when(
+    Loc=='G'|Loc=='S'|Loc=='J'|Loc=='V'~'CC', # Cornisa cantábrica
+    Loc=='L'|Loc=='P'~'MN',  # Mesa norte
+    Loc=='C'|Loc=='N'|Loc=='A'~'ES' # España seca
+  )) 
+########### separar herd-year-season a (Herd y la fecha (que es season_year)) ###########
+datos_raw<-datos_raw %>%
+  mutate(Herd = str_extract(H_Y_S, "\\d+"),
+         fecha = str_replace(H_Y_S, ".*_(\\d{4}_\\d+)$", "\\1"))
+################### sperar L_Age a (Lact, la edad (Age)) ######
+datos_raw <- datos_raw %>%
+  mutate(Lact = case_when(substr(L_Age, 1, 1) == "1" ~ 1,
+                          substr(L_Age, 1, 1) == "3" ~ 3,
+                          TRUE ~ 2),
+         Age = substr(L_Age, 2, 4))
+########################### concatenar lact con Zona  ############
+datos_raw <- datos_raw %>%
+  mutate(Zona_lact = paste(Zona,Lact,  sep = "_"))
+head(datos_raw)
+#######################################################################################
+############################# creat THI clases #############################
+datos_raw <- datos_raw %>%
+  mutate(THI_c = case_when(
+    between(THI012, 40, 41) ~ 1,  between(THI012, 42, 43) ~ 2,  between(THI012, 44, 45) ~ 3,
+    between(THI012, 46, 47) ~ 4,  between(THI012, 48, 49) ~ 5,  between(THI012, 50, 51) ~ 6,
+    between(THI012, 52, 53) ~ 7,  between(THI012, 54, 55) ~ 8,  between(THI012, 56, 57) ~ 9,
+    between(THI012, 58, 59) ~ 10, between(THI012, 60, 61) ~ 11, between(THI012, 62, 63) ~ 12,
+    between(THI012, 64, 65) ~ 13, between(THI012, 66, 67) ~ 14, between(THI012, 68, 69) ~ 15,
+    between(THI012, 70, 71) ~ 16, between(THI012, 72, 73) ~ 17, between(THI012, 74, 75) ~ 18,
+    between(THI012, 76, 77) ~ 19, between(THI012, 78, 79) ~ 20, between(THI012, 80, 81) ~ 21,
+    TRUE ~ NA_integer_  ))
+########################## concatinar la Zone y THI_c ####################
+datos_raw <- datos_raw %>%
+  mutate(THI_Zona = paste(Zona,THI_c,  sep = "_"))
+############################################################################
+################ create MP as a different traits en each zone ############
+datos_raw<- datos_raw %>%
+  mutate(
+    MP_CC = MP,
+    MP_MN = MP,
+    MP_ES = MP
+  )
+################### cambios condicionales en las columnas MPdepende la zona #####
+# in case CC
+datos_raw <- datos_raw %>%
+  mutate(
+    MP_MN = ifelse(Zona == "CC", 0, MP_MN),
+    MP_ES = ifelse(Zona == "CC", 0, MP_ES),
+    MP_CC = ifelse(Zona == "MN", 0, MP_CC),# in case MN
+    MP_ES = ifelse(Zona == "MN", 0, MP_ES),
+    MP_MN = ifelse(Zona == "ES", 0, MP_MN),# in case ES
+    MP_CC = ifelse(Zona == "ES", 0, MP_CC)
+  ) 
+############################################################################
+################ create fat as a different traits en each zone ############
+datos_raw<- datos_raw %>%
+  mutate(
+    Fat_CC = Fat,
+    Fat_MN = Fat,
+    Fat_ES = Fat
+  )
+################### cambios condicionales en las columnas MPdepende la zona #####
+# in case CC
+datos_raw <- datos_raw %>%
+  mutate(
+    Fat_MN = ifelse(Zona == "CC", 0, Fat_MN),
+    Fat_ES = ifelse(Zona == "CC", 0, Fat_ES),
+    Fat_CC = ifelse(Zona == "MN", 0, Fat_CC),# in case MN
+    Fat_ES = ifelse(Zona == "MN", 0, Fat_ES),
+    Fat_MN = ifelse(Zona == "ES", 0, Fat_MN),# in case ES
+    Fat_CC = ifelse(Zona == "ES", 0, Fat_CC)
+  )
+############################################################################
+################ create protein as a different traits en each zone ############
+datos_raw<- datos_raw %>%
+  mutate(
+    P_CC = P,
+    P_MN = P,
+    P_ES = P
+  )
+################### cambios condicionales en las columnas MPdepende la zona #####
+# in case CC
+datos_raw <- datos_raw %>%
+  mutate(
+    P_MN = ifelse(Zona == "CC", 0, P_MN),
+    P_ES = ifelse(Zona == "CC", 0, P_ES),
+    P_CC = ifelse(Zona == "MN", 0, P_CC),# in case MN
+    P_ES = ifelse(Zona == "MN", 0, P_ES),
+    P_MN = ifelse(Zona == "ES", 0, P_MN),# in case ES
+    P_CC = ifelse(Zona == "ES", 0, P_CC)
+  )
+############################################################################
+################ create fat as a different traits en each zone ############
+datos_raw<- datos_raw %>%
+  mutate(
+    F_p_CC = F_p,
+    F_p_MN = F_p,
+    F_p_ES = F_p
+  )
+################### cambios condicionales en las columnas MPdepende la zona #####
+# in case CC
+datos_raw <- datos_raw %>%
+  mutate(
+    F_p_MN = ifelse(Zona == "CC", 0, F_p_MN),
+    F_p_ES = ifelse(Zona == "CC", 0, F_p_ES),
+    F_p_CC = ifelse(Zona == "MN", 0, F_p_CC),# in case MN
+    F_p_ES = ifelse(Zona == "MN", 0, F_p_ES),
+    F_p_MN = ifelse(Zona == "ES", 0, F_p_MN),# in case ES
+    F_p_CC = ifelse(Zona == "ES", 0, F_p_CC)
+  )
+############################################################################
+################ create protein as a different traits en each zone ############
+datos_raw<- datos_raw %>%
+  mutate(
+    P_p_CC = P_p,
+    P_p_MN = P_p,
+    P_p_ES = P_p
+  )
+################### cambios condicionales en las columnas MPdepende la zona #####
+# in case CC
+datos_raw <- datos_raw %>%
+  mutate(
+    P_p_MN = ifelse(Zona == "CC", 0, P_p_MN),
+    P_p_ES = ifelse(Zona == "CC", 0, P_p_ES),
+    P_p_CC = ifelse(Zona == "MN", 0, P_p_CC),# in case MN
+    P_p_ES = ifelse(Zona == "MN", 0, P_p_ES),
+    P_p_MN = ifelse(Zona == "ES", 0, P_p_MN),# in case ES
+    P_p_CC = ifelse(Zona == "ES", 0, P_p_CC)
+  )
+######################
+datos_raw <- datos_raw %>%
+  mutate(
+    THI = case_when(
+      Zona == "CC" ~ THI012 - 67.86,
+      Zona == "MN" ~ THI012 - 69.5,
+      Zona == "ES" ~ THI012 - 75.04,
+      TRUE ~ THI012
+    )
+  )
+# Loading pedigree
+Ped<- read.table("ped.dat", h=TRUE)
+colnames(Ped)<-c("Animal","sire","dam")
+dim(Ped)
+######################### merge the data with pedigree file ###################
+datos <- merge(datos_raw,Ped,  by = "Animal", all.x = TRUE)
+dim(datos_raw)
+dim(datos)
+################  Escribir el objeto datos_raw en un archivo de texto para los analysis ###################################
+dat <- datos %>%
+         dplyr::select(
+                MP_CC, MP_MN, MP_ES, Fat_CC, Fat_MN, Fat_ES,
+                P_CC, P_MN, P_ES, F_p_CC, F_p_MN, F_p_ES,
+                P_p_CC, P_p_MN, P_p_ES, Lact, H_Y_S, L_Age,
+                Zona_lact, Age, THI, sire, Animal, THI_Zona, THI_c,
+                THI012, cov1_thimu012, cov2_thimu012, cov3_thimu012, cov1_dim,
+                cov2_dim, cov3_dim, CO_Herd, R_SC, S_SC, Loc,
+                H_COn_D, Co_DIM, DIM, hetdimthi, hetdimthiclass,
+                N_Part_L, D_Control, F_PARTO, Zona, Herd, fecha
+                ) 
+
+write.table(dat,"data.txt",quote=FALSE,col.names=FALSE,row.names=FALSE)
+```
